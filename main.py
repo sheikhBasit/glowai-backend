@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 load_dotenv()
 
 from database import Base, engine
-from routers import account, auth, diary, generate, glow_journey, looks, profile, recommendations, routine, scan, scans, score, tutorials
+from routers import account, auth, diary, generate, glow_journey, looks, profile, recommendations, routine, scan, scans, score, tutorials, webhooks
 
 # Create all tables on startup
 Base.metadata.create_all(bind=engine)
@@ -44,6 +44,7 @@ app.include_router(recommendations.router)
 app.include_router(tutorials.router)
 app.include_router(glow_journey.router)
 app.include_router(routine.router)
+app.include_router(webhooks.router)
 
 
 # ── Static file serving for uploads ──────────────────────────────────────────

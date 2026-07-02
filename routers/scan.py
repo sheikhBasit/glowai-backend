@@ -8,9 +8,18 @@ from sqlalchemy.orm import Session
 
 from deps import get_current_user, get_db
 from models import ScanReport, User
+from plan_limits import SCAN_LIMIT_FREE, is_pro
 from schemas import ScanOut
 from services import storage
 from services.claude import scan_face, scan_nails
+
+
+def _check_scan_limit(db: Session, user: User, scan_type: str) -> None:
+    if is_pro(user):
+        return
+    count = db.query(ScanReport).filter(ScanReport.user_id == user.id, ScanReport.scan_type == scan_type).count()
+    if count >= SCAN_LIMIT_FREE:
+        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, f"Free {scan_type} scan limit reached — upgrade to Pro for unlimited scans")
 
 limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(tags=["scan"])
@@ -28,6 +37,7 @@ async def face_scan(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _check_scan_limit(db, user, "face")
     try:
         data = base64.b64decode(body.photo_base64)
     except Exception:
@@ -51,6 +61,7 @@ async def nail_scan(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _check_scan_limit(db, user, "nail")
     try:
         data = base64.b64decode(body.photo_base64)
     except Exception:

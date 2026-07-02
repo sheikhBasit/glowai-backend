@@ -32,6 +32,8 @@ class UserOut(BaseModel):
     id: uuid.UUID
     email: str
     name: str | None
+    plan: str
+    plan_expires_at: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

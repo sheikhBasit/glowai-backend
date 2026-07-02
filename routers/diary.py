@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from deps import get_current_user, get_db
 from models import DiaryEntry, User
+from plan_limits import DIARY_LIMIT_FREE, is_pro
 from schemas import DiaryOut, DiaryUpdate
 from services import storage
 
@@ -53,6 +54,11 @@ async def create_entry(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    if not is_pro(user):
+        count = db.query(DiaryEntry).filter(DiaryEntry.user_id == user.id).count()
+        if count >= DIARY_LIMIT_FREE:
+            raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, "Free diary limit reached — upgrade to Pro for unlimited entries")
+
     image_path = None
     if body.image_base64:
         try:
