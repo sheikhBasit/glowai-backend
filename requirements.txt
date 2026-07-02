@@ -21,3 +21,7 @@ Pillow>=11.0.0
 # Rate limiting + file uploads
 slowapi==0.1.9
 python-multipart==0.0.12
+
+# Tutorial seeding (yt-dlp + transcripts)
+yt-dlp>=2024.10.0
+youtube-transcript-api>=0.6.2
