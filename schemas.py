@@ -109,6 +109,8 @@ class DiaryOut(BaseModel):
     image_path: str | None
     look_id: uuid.UUID | None
     occasion: str | None
+    score: float | None
+    products_used: list[dict] | None
     created_at: datetime
     updated_at: datetime
 

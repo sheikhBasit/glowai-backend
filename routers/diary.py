@@ -18,12 +18,19 @@ limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/diary", tags=["diary"])
 
 
+class ProductUsed(BaseModel):
+    item: str
+    color: str
+
+
 class DiaryCreate(BaseModel):
     title: str
     content: str | None = None
     occasion: str | None = None
     look_id: str | None = None
     image_base64: str | None = None
+    score: float | None = None
+    products_used: list[ProductUsed] | None = None
     tags: list[str] = []
 
 
@@ -74,6 +81,8 @@ async def create_entry(
         occasion=body.occasion,
         look_id=uuid.UUID(body.look_id) if body.look_id else None,
         image_path=image_path,
+        score=body.score,
+        products_used=[p.model_dump() for p in body.products_used] if body.products_used else None,
     )
     db.add(entry)
     db.commit()
