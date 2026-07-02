@@ -1,3 +1,5 @@
+import base64
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
@@ -5,6 +7,7 @@ from sqlalchemy.orm import Session
 import auth as auth_utils
 from deps import get_current_user, get_db
 from models import User
+from services import storage
 
 router = APIRouter(prefix="/account", tags=["account"])
 
@@ -23,6 +26,10 @@ class ChangePasswordBody(BaseModel):
 
 class UpdateNameBody(BaseModel):
     name: str
+
+
+class UpdateAvatarBody(BaseModel):
+    image_base64: str
 
 
 @router.patch("/password", status_code=status.HTTP_204_NO_CONTENT)
@@ -48,6 +55,27 @@ def update_name(
     db.commit()
     db.refresh(user)
     return {"id": str(user.id), "name": user.name, "email": user.email}
+
+
+@router.patch("/avatar")
+def update_avatar(
+    body: UpdateAvatarBody,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        data = base64.b64decode(body.image_base64)
+        avatar_path = storage.save(data, "avatars", "jpg")
+    except Exception:
+        raise HTTPException(400, "Invalid image_base64")
+
+    if user.avatar_url:
+        storage.delete(user.avatar_url)
+
+    user.avatar_url = avatar_path
+    db.commit()
+    db.refresh(user)
+    return {"id": str(user.id), "avatar_url": user.avatar_url}
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)

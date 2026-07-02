@@ -19,6 +19,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str | None] = mapped_column(String)
+    avatar_url: Mapped[str | None] = mapped_column(String)
     token_version: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
     plan: Mapped[str] = mapped_column(String, default="free", nullable=False)   # free | pro
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
