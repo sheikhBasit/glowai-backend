@@ -17,10 +17,15 @@ if config.config_file_name is not None:
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from database import Base
+from database import Base, DATABASE_URL
 import models  # noqa: F401 — registers all tables on Base.metadata
 
 target_metadata = Base.metadata
+
+# Prefer the same DATABASE_URL the app itself uses (env var, via database.py)
+# over the static placeholder in alembic.ini, so migrations target the
+# actual configured DB (e.g. the "db" compose service) instead of localhost.
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
