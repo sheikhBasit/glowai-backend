@@ -116,8 +116,8 @@ Respond ONLY with a JSON object, no markdown, no explanation:
 
 
 def scan_face(photo_b64: str) -> dict:
-    prompt = """You are a certified dermatologist and skincare AI.
-Analyse this facial photo and return a detailed skin analysis.
+    prompt = """You are a makeup-focused beauty AI for girls.
+Analyse this facial photo and return a detailed skin tone, undertone, and makeup personalization report.
 
 Respond ONLY with a JSON object, no markdown:
 {
@@ -134,8 +134,28 @@ Respond ONLY with a JSON object, no markdown:
     "blush": "<shade description>",
     "lips": "<shade description>"
   },
+  "tone": "<specific makeup tone, e.g. soft peach glow, cool berry glam>",
+  "makeup_intensity_pct": <integer 0-100>,
+  "occasion_palettes": {
+    "everyday": ["<color name>", "<color name>", "<color name>", "<color name>"],
+    "work": ["<color name>", "<color name>", "<color name>", "<color name>"],
+    "date_night": ["<color name>", "<color name>", "<color name>", "<color name>"],
+    "party": ["<color name>", "<color name>", "<color name>", "<color name>"],
+    "wedding": ["<color name>", "<color name>", "<color name>", "<color name>"],
+    "festival": ["<color name>", "<color name>", "<color name>", "<color name>"]
+  },
   "summary": "<2-3 sentence friendly summary>"
-}"""
+}
+
+Rules:
+- Do not ask for or infer gender identity.
+- Separate visible skin tone depth from undertone.
+- Warm undertone: peach, coral, bronze, copper, terracotta, caramel.
+- Cool undertone: rose, berry, plum, mauve, cool taupe, blue-red.
+- Neutral undertone: balanced rose-brown, peach-rose, cocoa, champagne.
+- Fair/light skin usually needs softer pigment load; tan/deep skin can carry richer saturation and contrast.
+- Avoid gray, chalky, or overly pale base/highlight colors on deep skin.
+- Occasion palettes must change by context: everyday fresh, work polished, date night romantic, party glam, wedding timeless, festival creative."""
     return _parse_json(_vision(prompt, photo_b64))
 
 
@@ -175,12 +195,12 @@ async def analyze_and_generate(
 
     # Occasion intensity guide so Gemini picks the right number of zones
     occasion_guides = {
-        "Everyday": "minimal, 1-2 zones max (lips or blush only)",
-        "Work": "polished but subtle, 2 zones (brows + lips or blush)",
-        "Date Night": "romantic and elevated, 3-4 zones",
-        "Party": "bold and full glam, 3-5 zones",
-        "Wedding": "timeless and luminous, 4-5 zones",
-        "Festival": "creative and expressive, 3-5 zones with color",
+        "Everyday": "fresh clean glow, 20-35% visible makeup, soft low-contrast palette",
+        "Work": "polished professional, 35-50% visible makeup, refined neutral palette",
+        "Date Night": "romantic and elevated, 45-65% visible makeup, rose/mauve/berry palette",
+        "Party": "bold glam, 65-85% visible makeup, richer contrast and shine",
+        "Wedding": "timeless luminous long-wear, 55-75% visible makeup, camera-friendly palette",
+        "Festival": "creative expressive color, 55-90% visible makeup, playful palette",
     }
     intensity = occasion_guides.get(occasion, "appropriate for the occasion, 2-3 zones")
 
@@ -194,7 +214,7 @@ Person details: {tone_ctx or "analyze from image."}
 Occasion: {occasion} — {intensity}.
 {palette_ctx}
 
-Study this person's face carefully: skin tone, undertone, face shape, eye shape, lip shape, brow shape.
+Study this person's face carefully: skin tone depth, undertone, face shape, eye shape, lip shape, brow shape, contrast level, and how strongly makeup should be applied.
 
 Create a FULL look appropriate for {occasion}. Always include AT MINIMUM: lips + eyes + blush. Add contour, highlight, brows, lipliner as the occasion demands. A complete makeover means all relevant zones are activated.
 
@@ -214,6 +234,9 @@ Respond ONLY with JSON (no markdown):
   "analysis": "<2 sentences: their notable features + why this complete look suits them for {occasion}>",
   "applied": ["<specific product e.g. 'Smoky taupe eye shadow'>", "<product 2>", "<product 3>"],
   "why": "<max 25 words: why these specific choices create the perfect {occasion} look for this person>",
+  "tone": "<specific makeup tone, e.g. soft romantic rose, polished peach-bronze, cool berry glam>",
+  "makeup_intensity_pct": <integer 0-100 showing the percentage of visible makeup application>,
+  "occasion_palette": ["<4 color names chosen for {occasion} and this skin tone/undertone>"],
   "score": <0.0-10.0 float: how well this complete look matches {occasion} and their features>
 }}
 
@@ -221,7 +244,9 @@ Rules:
 - "zones" must have AT LEAST lips + eyes + blush for any occasion
 - "colors" must include a hex for every zone listed plus contour and highlight
 - Stay true to the user's selected color palette family while refining for their features
-- Colors must work for their undertone: warm → warm/golden; cool → cool/rosy; neutral → either
+- Colors must work for skin tone depth and undertone: warm → peach/coral/bronze/terracotta; cool → rose/berry/plum/mauve/taupe; neutral → balanced rose-brown/peach-rose/cocoa
+- Fair/light skin usually needs softer pigment load; tan/deep/rich skin can carry richer saturation and contrast
+- Avoid gray, chalky, or overly pale base/highlight colors on deep or rich skin
 - All hex values must be valid 6-digit hex (e.g. "#C2856A")"""
 
     raw = _vision(prompt, ar_b64)
@@ -233,6 +258,9 @@ Rules:
         "analysis": data.get("analysis", ""),
         "applied": data.get("applied", []),
         "why": data.get("why", ""),
+        "tone": data.get("tone", ""),
+        "makeup_intensity_pct": int(data.get("makeup_intensity_pct", 50)),
+        "occasion_palette": data.get("occasion_palette", []),
         "score": float(data.get("score", 7.0)),
     }
 
@@ -243,11 +271,13 @@ def get_recommendations(profile: dict, occasion: str) -> list:
     skin_type = profile.get("skin_type") or "normal"
     concerns = profile.get("concerns") or []
 
-    prompt = f"""You are a professional makeup artist.
+    prompt = f"""You are a professional makeup artist creating occasion-wise color palettes for girls.
 Suggest 3 makeup palettes for:
 - Skin tone: {skin_tone}, undertone: {undertone}, skin type: {skin_type}
 - Concerns: {", ".join(concerns) or "none"}
 - Occasion: {occasion}
+
+Use real makeup color theory: warm undertones suit peach, coral, bronze, terracotta, copper, and caramel; cool undertones suit rose, berry, plum, mauve, cool taupe, and blue-red; neutral undertones suit balanced rose-brown, peach-rose, cocoa, and champagne. Adjust saturation to skin tone depth so fair/light skin is not overpowered and tan/deep/rich skin is not made gray or chalky.
 
 Respond ONLY with a JSON array, no markdown:
 [
@@ -255,6 +285,8 @@ Respond ONLY with a JSON array, no markdown:
     "name": "<palette name>",
     "emoji": "<single emoji>",
     "occasion": "{occasion}",
+    "tone": "<specific tone, e.g. polished peach bronze>",
+    "makeup_intensity_pct": <integer 0-100>,
     "colors": {{
       "lips": "<hex>", "blush": "<hex>", "eyes": "<hex>",
       "contour": "<hex>", "highlight": "<hex>", "brows": "<hex>",
