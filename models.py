@@ -21,6 +21,8 @@ class User(Base):
     name: Mapped[str | None] = mapped_column(String)
     avatar_url: Mapped[str | None] = mapped_column(String)
     token_version: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
+    reset_code_hash: Mapped[str | None] = mapped_column(String)
+    reset_code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     plan: Mapped[str] = mapped_column(String, default="free", nullable=False)   # free | pro
     plan_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc)

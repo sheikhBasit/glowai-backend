@@ -1,16 +1,38 @@
+import hashlib
+import secrets
 import uuid
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import auth as auth_utils
 from deps import get_current_user, get_db
 from models import User
-from schemas import AccessTokenResponse, AuthResponse, LoginRequest, RefreshRequest, SignupRequest, UserOut
+from schemas import (
+    AccessTokenResponse,
+    AuthResponse,
+    ForgotPasswordRequest,
+    LoginRequest,
+    RefreshRequest,
+    ResetPasswordRequest,
+    SignupRequest,
+    UserOut,
+)
+from services.email import send_password_reset_code
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+limiter = Limiter(key_func=get_remote_address)
+
+RESET_CODE_TTL_MINUTES = 15
+
+
+def _hash_reset_code(code: str) -> str:
+    return hashlib.sha256(code.encode()).hexdigest()
 
 
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
@@ -69,3 +91,36 @@ def logout(user: User = Depends(get_current_user), db: Session = Depends(get_db)
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)):
     return UserOut.model_validate(user)
+
+
+@router.post("/forgot-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/hour")
+def forgot_password(request: Request, body: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(func.lower(User.email) == body.email.strip().lower()).first()
+    if user:
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        user.reset_code_hash = _hash_reset_code(code)
+        user.reset_code_expires_at = datetime.now(timezone.utc) + timedelta(minutes=RESET_CODE_TTL_MINUTES)
+        db.commit()
+        send_password_reset_code(user.email, code)
+    # Always 204, whether or not the email is registered — don't leak account existence.
+
+
+@router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("10/hour")
+def reset_password(request: Request, body: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(func.lower(User.email) == body.email.strip().lower()).first()
+    if (
+        not user
+        or not user.reset_code_hash
+        or not user.reset_code_expires_at
+        or user.reset_code_expires_at < datetime.now(timezone.utc)
+        or user.reset_code_hash != _hash_reset_code(body.code)
+    ):
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+
+    user.password_hash = auth_utils.hash_password(body.new_password)
+    user.reset_code_hash = None
+    user.reset_code_expires_at = None
+    user.token_version += 1  # invalidate all existing sessions
+    db.commit()
